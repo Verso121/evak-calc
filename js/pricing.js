@@ -1,0 +1,114 @@
+// Тарифы по умолчанию (заглушки — меняются в приложении) и сам расчёт.
+(function (root) {
+  const CATEGORIES = [
+    { id: "L", name: "Легковой", heavy: false },
+    { id: "K", name: "Кроссовер / внедорожник", heavy: false },
+    { id: "M", name: "Мото / квадро", heavy: false },
+    { id: "C", name: "Коммерческий (Газель, фургон)", heavy: true },
+    { id: "B", name: "Автобус / микроавтобус", heavy: true },
+    { id: "T", name: "Грузовик до 5 т", heavy: true },
+    { id: "S", name: "Спецтехника до 5 т", heavy: true }
+  ];
+
+  // base — подача/погрузка (включает includedKm км), perKm — за каждый км сверх.
+  // Для тяжёлых: loaded — надбавка «гружёный», lenLimit/lenFix/lenPerM — длина,
+  // hLimit/hFix — высота.
+  function defaultTariffs() {
+    return {
+      version: 1,
+      cats: {
+        L: { base: 3000, includedKm: 10, perKm: 60 },
+        K: { base: 3500, includedKm: 10, perKm: 70 },
+        M: { base: 2500, includedKm: 10, perKm: 50 },
+        C: { base: 5000, includedKm: 10, perKm: 90, loaded: 2000, lenLimit: 6, lenFix: 1500, lenPerM: 500, hLimit: 2.5, hFix: 1500 },
+        B: { base: 6000, includedKm: 10, perKm: 110, loaded: 2000, lenLimit: 7, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 },
+        T: { base: 7000, includedKm: 10, perKm: 120, loaded: 3000, lenLimit: 6.5, lenFix: 2000, lenPerM: 700, hLimit: 3, hFix: 2000 },
+        S: { base: 7000, includedKm: 10, perKm: 120, loaded: 2000, lenLimit: 5, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 }
+      },
+      // type: fixed — фикс., unit — за штуку/час, percent — % от суммы
+      extras: [
+        { id: "ditch", name: "В кювете (вытаскивание)", type: "fixed", price: 2000 },
+        { id: "wheel", name: "Заблокировано колесо", type: "unit", price: 500, unitName: "шт", max: 4 },
+        { id: "steer", name: "Заблокирован руль", type: "fixed", price: 500 },
+        { id: "gear", name: "Заблокирована КПП / паркинг", type: "fixed", price: 1000 },
+        { id: "low", name: "Низкая посадка", type: "fixed", price: 500 },
+        { id: "crash", name: "После ДТП / сильные повреждения", type: "fixed", price: 1000 },
+        { id: "wait", name: "Ожидание", type: "unit", price: 500, unitName: "ч", max: 24 },
+        { id: "night", name: "Ночь (22:00–06:00)", type: "percent", price: 20 },
+        { id: "urgent", name: "Срочно", type: "percent", price: 15 }
+      ],
+      feed: { enabled: false, perKm: 40, baseName: "", baseLat: null, baseLon: null },
+      roundStep: 100,
+      minTotal: 0
+    };
+  }
+
+  const num = v => (Number.isFinite(+v) ? +v : 0);
+
+  // input: { cat, loaded, length, height, km, feedKm, extras: {id: qty} }
+  function calc(t, input) {
+    const c = t.cats[input.cat];
+    const meta = CATEGORIES.find(x => x.id === input.cat);
+    const lines = [];
+    if (!c) return { lines, total: 0 };
+    const km = Math.ceil(Math.max(0, num(input.km)));
+
+    lines.push({ label: `Подача и погрузка (вкл. ${num(c.includedKm)} км)`, sum: num(c.base) });
+    const over = Math.max(0, km - num(c.includedKm));
+    if (over > 0) lines.push({ label: `Пробег ${over} км × ${num(c.perKm)} ₽`, sum: over * num(c.perKm) });
+
+    const feedKm = Math.ceil(Math.max(0, num(input.feedKm)));
+    if (t.feed && t.feed.enabled && feedKm > 0)
+      lines.push({ label: `Подача от базы ${feedKm} км × ${num(t.feed.perKm)} ₽`, sum: feedKm * num(t.feed.perKm) });
+
+    if (meta && meta.heavy) {
+      if (input.loaded && num(c.loaded)) lines.push({ label: "Гружёный", sum: num(c.loaded) });
+      const len = num(input.length), lim = num(c.lenLimit);
+      if (len > 0 && lim > 0 && len > lim) {
+        const extraM = Math.ceil(Math.round((len - lim) * 1000) / 100) / 10;
+        lines.push({ label: `Длина ${len} м (свыше ${lim} м)`, sum: num(c.lenFix) + Math.ceil(extraM * num(c.lenPerM)) });
+      }
+      const h = num(input.height), hl = num(c.hLimit);
+      if (h > 0 && hl > 0 && h > hl) lines.push({ label: `Высота ${h} м (свыше ${hl} м)`, sum: num(c.hFix) });
+    }
+
+    const sel = input.extras || {};
+    const percents = [];
+    for (const e of t.extras || []) {
+      const q = num(sel[e.id]);
+      if (!q) continue;
+      if (e.type === "percent") percents.push(e);
+      else if (e.type === "unit") lines.push({ label: `${e.name} × ${q} ${e.unitName || ""}`.trim(), sum: q * num(e.price) });
+      else lines.push({ label: e.name, sum: num(e.price) });
+    }
+
+    const subtotal = lines.reduce((s, l) => s + l.sum, 0);
+    for (const e of percents)
+      lines.push({ label: `${e.name} +${num(e.price)}%`, sum: Math.round(subtotal * num(e.price) / 100) });
+
+    let total = lines.reduce((s, l) => s + l.sum, 0);
+    if (num(t.minTotal) && total < num(t.minTotal)) {
+      lines.push({ label: "Доплата до минимального заказа", sum: num(t.minTotal) - total });
+      total = num(t.minTotal);
+    }
+    const step = num(t.roundStep);
+    const rounded = step > 0 ? Math.ceil(total / step) * step : total;
+    return { lines, raw: total, total: rounded };
+  }
+
+  // Подмешивает недостающие поля из умолчаний (после обновлений приложения)
+  function migrate(saved) {
+    const d = defaultTariffs();
+    if (!saved || typeof saved !== "object") return d;
+    const out = Object.assign({}, d, saved);
+    out.cats = {};
+    for (const id of Object.keys(d.cats)) out.cats[id] = Object.assign({}, d.cats[id], (saved.cats || {})[id]);
+    out.feed = Object.assign({}, d.feed, saved.feed);
+    if (!Array.isArray(saved.extras)) out.extras = d.extras;
+    return out;
+  }
+
+  const api = { CATEGORIES, defaultTariffs, calc, migrate };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else root.Pricing = api;
+})(typeof self !== "undefined" ? self : this);

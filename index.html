@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Эвак Калькулятор</title>
+<meta name="theme-color" content="#14161a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">🚛</span> Эвак Калькулятор</div>
+  <nav>
+    <button class="icon-btn" data-view="history" title="История">🕘</button>
+    <button class="icon-btn" data-view="settings" title="Тарифы">⚙︎</button>
+  </nav>
+</header>
+
+<!-- ===== Расчёт ===== -->
+<main id="view-calc" class="view active">
+  <section class="card">
+    <h2>Транспорт</h2>
+    <div class="field ac">
+      <input id="car" type="search" placeholder="Марка или модель: камри, газель, х5…" autocomplete="off">
+      <ul id="car-list" class="suggest"></ul>
+    </div>
+    <div id="cats" class="chips"></div>
+    <div id="heavy" class="heavy hidden">
+      <div class="seg" id="load-seg">
+        <button data-load="0" class="on">Пустой</button>
+        <button data-load="1">Гружёный</button>
+      </div>
+      <div class="row2">
+        <label class="mini">Длина, м<input id="len" type="number" inputmode="decimal" step="0.1" min="0" placeholder="—"></label>
+        <label class="mini">Высота, м<input id="hgt" type="number" inputmode="decimal" step="0.1" min="0" placeholder="—"></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Маршрут</h2>
+    <div class="pt">
+      <span class="pin a">A</span>
+      <div class="field ac">
+        <input id="pa" type="search" placeholder="Откуда забрать" autocomplete="off">
+        <ul class="suggest" id="pa-list"></ul>
+      </div>
+      <button class="sq" id="gps" title="Моё местоположение">◎</button>
+      <button class="sq" data-pick="a" title="Указать на карте">⌖</button>
+    </div>
+    <div class="pt">
+      <span class="pin b">B</span>
+      <div class="field ac">
+        <input id="pb" type="search" placeholder="Куда везти" autocomplete="off">
+        <ul class="suggest" id="pb-list"></ul>
+      </div>
+      <button class="sq" id="swap" title="Поменять местами">⇅</button>
+      <button class="sq" data-pick="b" title="Указать на карте">⌖</button>
+    </div>
+    <div id="pick-hint" class="hint hidden">Нажми на карту, чтобы поставить точку</div>
+    <div id="map"></div>
+    <div class="route-info">
+      <div><span id="r-km">—</span><small>км</small></div>
+      <div><span id="r-min">—</span><small>в пути</small></div>
+      <div id="r-feed-wrap" class="hidden"><span id="r-feed">—</span><small>подача от базы, км</small></div>
+    </div>
+    <label class="manual">Км вручную (если нет связи):
+      <input id="km-manual" type="number" inputmode="decimal" min="0" placeholder="авто">
+    </label>
+    <div id="route-err" class="err hidden"></div>
+  </section>
+
+  <section class="card">
+    <h2>Условия</h2>
+    <div id="extras" class="extras"></div>
+  </section>
+
+  <section class="card breakdown">
+    <h2>Расчёт</h2>
+    <ul id="lines"></ul>
+  </section>
+  <div class="spacer"></div>
+</main>
+
+<!-- ===== Итог (липкая панель) ===== -->
+<footer id="totalbar">
+  <div class="tot"><small>Итого</small><span id="total">0 ₽</span></div>
+  <button id="btn-nav" class="ghost" title="Открыть маршрут в Яндекс Картах">Навигатор</button>
+  <button id="btn-copy" class="primary">Клиенту</button>
+</footer>
+
+<!-- ===== Тарифы ===== -->
+<main id="view-settings" class="view">
+  <div class="view-head"><button class="back" data-view="calc">‹ Назад</button><h1>Тарифы</h1></div>
+  <p class="note">Все цены в рублях. Сохраняются на этом устройстве автоматически. Чтобы перенести на другое устройство — «Экспорт», затем «Импорт» там.</p>
+  <div id="cat-settings"></div>
+
+  <section class="card">
+    <h2>Условия и надбавки</h2>
+    <p class="note">«Фикс» — разовая сумма, «За ед.» — за штуку/час, «%» — процент от суммы.</p>
+    <div id="extra-settings"></div>
+    <button id="add-extra" class="ghost wide">+ Добавить пункт</button>
+  </section>
+
+  <section class="card">
+    <h2>Подача от базы</h2>
+    <label class="switch"><input type="checkbox" id="feed-on"> Считать км от базы до точки A</label>
+    <div class="field ac">
+      <input id="base-addr" type="search" placeholder="Адрес базы / стоянки" autocomplete="off">
+      <ul class="suggest" id="base-list"></ul>
+    </div>
+    <label class="mini">Цена за км подачи, ₽<input id="feed-km" type="number" inputmode="numeric" min="0"></label>
+  </section>
+
+  <section class="card">
+    <h2>Общее</h2>
+    <label class="mini">Округлять итог вверх до, ₽<input id="round" type="number" inputmode="numeric" min="0"></label>
+    <label class="mini">Минимальный заказ, ₽ (0 — нет)<input id="min-total" type="number" inputmode="numeric" min="0"></label>
+    <label class="switch"><input type="checkbox" id="share-detail"> В сообщении клиенту показывать разбивку</label>
+  </section>
+
+  <section class="card">
+    <h2>Перенос и сброс</h2>
+    <div class="btns">
+      <button id="export" class="ghost">Экспорт</button>
+      <button id="import" class="ghost">Импорт</button>
+      <button id="reset" class="danger">Сбросить</button>
+    </div>
+    <input id="import-file" type="file" accept=".json,application/json" hidden>
+  </section>
+  <div class="spacer"></div>
+</main>
+
+<!-- ===== История ===== -->
+<main id="view-history" class="view">
+  <div class="view-head"><button class="back" data-view="calc">‹ Назад</button><h1>История</h1></div>
+  <p class="note">Сюда попадают расчёты, которые ты отправил клиенту. Нажми, чтобы открыть снова.</p>
+  <ul id="history"></ul>
+  <button id="clear-history" class="danger wide">Очистить историю</button>
+  <div class="spacer"></div>
+</main>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/cars.js"></script>
+<script src="js/pricing.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
