@@ -55,7 +55,7 @@
 
     lines.push({ label: `Подача и погрузка (вкл. ${num(c.includedKm)} км)`, sum: num(c.base) });
     const over = Math.max(0, km - num(c.includedKm));
-    if (over > 0) lines.push({ label: `Пробег ${over} км × ${num(c.perKm)} ₽`, sum: over * num(c.perKm) });
+    if (over > 0) lines.push({ label: num(c.includedKm) > 0 ? `Пробег ${km} км − ${num(c.includedKm)} включено = ${over} км × ${num(c.perKm)} ₽` : `Пробег ${over} км × ${num(c.perKm)} ₽`, sum: over * num(c.perKm) });
 
     const feedKm = Math.ceil(Math.max(0, num(input.feedKm)));
     if (t.feed && t.feed.enabled && feedKm > 0)
