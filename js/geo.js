@@ -43,6 +43,7 @@
     if (j.code !== "Ok" || !j.routes || !j.routes.length) throw new Error("Маршрут не найден");
     const rt = j.routes[0];
     return {
+      by: "osm",
       km: rt.distance / 1000,
       min: rt.duration / 60,
       coords: rt.geometry.coordinates.map(([lon, lat]) => [lat, lon])

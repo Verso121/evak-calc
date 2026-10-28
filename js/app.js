@@ -140,6 +140,7 @@
     const my = ++routeSeq;
     $("#route-err").classList.add("hidden");
     if (map) map.line(null);
+    $("#r-src").textContent = "";
     S.km = null; S.min = null;
     if (S.a && S.b) {
       $("#r-km").textContent = "…";
@@ -147,6 +148,7 @@
         const r = await Geo.route(S.a, S.b);
         if (my !== routeSeq) return;
         S.km = r.km; S.min = r.min;
+        $("#r-src").textContent = r.by === "yandex" ? "Маршрут посчитан по Яндексу" : "Маршрут посчитан по OpenStreetMap";
         if (map) map.line(r.coords);
       } catch (e) {
         if (my !== routeSeq) return;
