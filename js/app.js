@@ -391,5 +391,16 @@
   // ---------- старт ----------
   document.body.classList.add("on-calc");
   renderCats(); renderExtras(); initMap(); drawRouteInfo(); recalc();
-  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+      reg.update().catch(() => {});
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => {});
+    // Пришла новая версия — один раз перезагружаемся, чтобы её показать
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloaded) return; reloaded = true; location.reload();
+    });
+  }
 })();

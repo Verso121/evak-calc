@@ -1,5 +1,5 @@
 // Офлайн-кэш: свои файлы — сначала сеть (чтобы обновления приходили сразу), при отсутствии сети — из кэша.
-const CACHE = "evak-v8";
+const CACHE = "evak-v9";
 const SHELL = ["./", "index.html", "css/style.css", "js/cars.js", "js/pricing.js", "js/geo.js", "js/app.js",
   "manifest.webmanifest", "icons/icon-192.png",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"];
@@ -10,10 +10,14 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
   if (e.request.method !== "GET") return;
-  const own = u.origin === location.origin || u.hostname === "unpkg.com";
-  if (!own) return; // карты, поиск, маршруты — всегда из сети
+  if (u.hostname === "unpkg.com") { // библиотека карты не меняется — из кэша
+    e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => { const c = res.clone(); caches.open(CACHE).then(x => x.put(e.request, c)); return res; })));
+    return;
+  }
+  if (u.origin !== location.origin) return; // карты, поиск, маршруты — всегда из сети
+  // Свои файлы: всегда свежие с сервера (мимо HTTP-кэша), без сети — из кэша
   e.respondWith(
-    fetch(e.request).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
+    fetch(e.request, { cache: "no-cache" }).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }))
   );
 });
