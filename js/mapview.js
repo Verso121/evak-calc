@@ -7,6 +7,7 @@
   function leafletView(el, onClick) {
     const L = root.L;
     const map = L.map(el, { zoomControl: true }).setView([START.lat, START.lon], START.zoom);
+    map.attributionControl.setPrefix(false); // без логотипа библиотеки, подпись OSM остаётся
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
     map.on("click", e => onClick(e.latlng.lat, e.latlng.lng));
     const icon = (txt, color) => L.divIcon({ className: "", html: `<div class="mk" style="background:${color}"><span>${txt}</span></div>`, iconSize: [28, 28], iconAnchor: [14, 28] });
