@@ -259,8 +259,30 @@
     if (navigator.share && matchMedia("(pointer: coarse)").matches) {
       try { await navigator.share({ text }); return; } catch (e) { if (e.name === "AbortError") return; }
     }
-    try { await navigator.clipboard.writeText(text); toast("Скопировано — вставь клиенту"); }
-    catch (e) { prompt("Скопируй текст:", text); }
+    if (await copyText(text)) toast("Скопировано — вставь клиенту");
+    else showShare(text); // буфер недоступен — показываем текст, чтобы скопировать вручную
+  });
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* пробуем старый способ */ }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand("copy"); ta.remove(); return ok;
+    } catch (e) { return false; }
+  }
+  function showShare(text) {
+    $("#share-text").value = text;
+    $("#share-modal").classList.remove("hidden");
+    const ta = $("#share-text"); ta.focus(); ta.select();
+  }
+  $("#share-close").addEventListener("click", () => $("#share-modal").classList.add("hidden"));
+  $("#share-modal").addEventListener("click", e => { if (e.target.id === "share-modal") $("#share-modal").classList.add("hidden"); });
+  $("#share-copy").addEventListener("click", async () => {
+    const ta = $("#share-text"); ta.focus(); ta.select();
+    if (await copyText(ta.value)) { toast("Скопировано"); $("#share-modal").classList.add("hidden"); }
+    else toast("Выдели текст и нажми Ctrl+C");
   });
   $("#btn-nav").addEventListener("click", () => {
     if (!(S.a && S.b)) return toast("Укажи точки A и B");

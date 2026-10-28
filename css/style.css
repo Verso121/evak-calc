@@ -141,3 +141,8 @@ body:not(.on-calc) #totalbar { display: none; }
 }
 .weight-info { font-size: 14px; color: var(--mute); background: var(--field); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; }
 .weight-info b { color: var(--text); } .weight-info .hv { color: var(--acc); }
+.modal { position: fixed; inset: 0; z-index: 3000; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
+.modal-box { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; width: 100%; max-width: 520px; }
+.modal-box h2 { font-size: 16px; margin: 0 0 10px; }
+.modal-box textarea { width: 100%; background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px; font: inherit; font-size: 15px; resize: vertical; margin-bottom: 10px; }
