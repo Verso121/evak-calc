@@ -68,24 +68,37 @@
 
   // ---------- транспорт ----------
   const catName = id => (Pricing.CATEGORIES.find(c => c.id === id) || {}).name || id;
+  const catMeta = () => Pricing.CATEGORIES.find(c => c.id === S.cat) || Pricing.CATEGORIES[0];
+  const fixCat = id => (id === "B" || id === "T") ? "C" : (Pricing.CATEGORIES.some(c => c.id === id) ? id : "L");
   function renderCats() {
-    $("#cats").innerHTML = Pricing.CATEGORIES.map(c => `<button class="chip ${c.id === S.cat ? "on" : ""}" data-cat="${c.id}">${esc(c.name)}</button>`).join("");
-    const heavy = Pricing.CATEGORIES.find(c => c.id === S.cat).heavy;
-    $("#heavy").classList.toggle("hidden", !heavy);
+    S.cat = fixCat(S.cat);
+    $("#cats").innerHTML = Pricing.CATEGORIES.map(c => `<button class="chip ${c.id === S.cat ? "on" : ""}" data-cat="${c.id}" title="${esc(c.name)}">${esc(c.short || c.name)}</button>`).join("");
+    const m = catMeta();
+    $("#heavy").classList.toggle("hidden", !m.heavy);
+    $("#load-seg").classList.toggle("hidden", m.weight !== "cargo");
+    $("#mass-label").textContent = m.weight === "own" ? "Масса техники, т" : "Масса авто (пустого), т";
+    $("#mass").placeholder = m.defMass ? `~${m.defMass}` : "—";
+    $("#cargo-wrap").classList.toggle("hidden", !(m.weight === "cargo" && S.loaded));
+  }
+  function setMassFromCar() {
+    $("#mass").value = S.car && S.car.mass ? String(S.car.mass) : "";
   }
   $("#cats").addEventListener("click", e => {
     const b = e.target.closest("[data-cat]"); if (!b) return;
     S.cat = b.dataset.cat; renderCats(); recalc();
   });
   autocomplete($("#car"), $("#car-list"),
-    async q => CarDB.search(q, 12).map(c => ({ label: c.brand + " " + c.model, sub: catName(c.cat), car: c })),
-    it => { S.car = it.car; S.cat = it.car.cat; $("#car").value = it.label; renderCats(); recalc(); }, 60);
+    async q => CarDB.search(q, 12).map(c => ({ label: c.brand + " " + c.model, sub: (Pricing.CATEGORIES.find(x => x.id === c.cat) || {}).short || catName(c.cat), car: c })),
+    it => { S.car = it.car; S.cat = it.car.cat; $("#car").value = it.label; setMassFromCar(); renderCats(); recalc(); }, 60);
   $("#car").addEventListener("input", () => { if (!$("#car").value.trim()) { S.car = null; recalc(); } });
   $("#load-seg").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     S.loaded = b.dataset.load === "1";
-    $$("#load-seg button").forEach(x => x.classList.toggle("on", x === b)); recalc();
+    $$("#load-seg button").forEach(x => x.classList.toggle("on", x === b));
+    renderCats(); recalc();
+    if (S.loaded) $("#cargo").focus();
   });
+  ["#mass", "#cargo"].forEach(id => $(id).addEventListener("input", recalc));
   ["#len", "#hgt"].forEach(id => $(id).addEventListener("input", recalc));
 
   // ---------- карта ----------
@@ -213,6 +226,8 @@
   function recalc() {
     const input = {
       cat: S.cat, loaded: S.loaded,
+      mass: parseFloat(String($("#mass").value).replace(",", ".")) || 0,
+      cargo: parseFloat(String($("#cargo").value).replace(",", ".")) || 0,
       length: parseFloat(String($("#len").value).replace(",", ".")) || 0,
       height: parseFloat(String($("#hgt").value).replace(",", ".")) || 0,
       km: currentKm(), feedKm: S.feedKm || 0, extras: S.extras
@@ -222,6 +237,15 @@
     $("#lines").innerHTML = r.lines.map(l => `<li><span>${esc(l.label)}</span><b>${rub(l.sum)}</b></li>`).join("")
       + (r.total !== r.raw ? `<li class="round"><span>Округление</span><b>+${rub(r.total - r.raw)}</b></li>` : "");
     $("#total").textContent = rub(r.total);
+    const m = catMeta();
+    if (m.weight) {
+      const c = T.cats[S.cat], heavy = c.hFrom > 0 && r.weight >= c.hFrom;
+      const w = String(Math.round(r.weight * 10) / 10).replace(".", ",");
+      const from = String(c.hFrom).replace(".", ",");
+      $("#weight-info").innerHTML = `${m.weight === "cargo" ? "Общая масса" : "Масса"} ≈ <b>${w} т</b> → `
+        + (heavy ? `<b class="hv">тяжёлый тариф</b> (от ${from} т)` : `обычный тариф (тяжёлый — от ${from} т)`)
+        + (input.mass ? "" : " · масса примерная, уточни");
+    }
   }
 
   // ---------- клиенту / навигатор ----------
@@ -230,9 +254,11 @@
     const car = S.car ? `${S.car.brand} ${S.car.model}` : ($("#car").value.trim() || catName(S.cat));
     const out = [`Эвакуация: ${car}`];
     if (Pricing.CATEGORIES.find(c => c.id === S.cat).heavy) {
-      const d = [S.loaded ? "гружёный" : "пустой"];
+      const m = catMeta(), d = [];
+      if (m.weight === "cargo") d.push(S.loaded ? `гружёный${input.cargo ? ", груз " + input.cargo + " т" : ""}` : "пустой");
+      else if (input.mass) d.push(`масса ${input.mass} т`);
       if (input.length) d.push(`длина ${input.length} м`); if (input.height) d.push(`высота ${input.height} м`);
-      out[0] += ` (${d.join(", ")})`;
+      if (d.length) out[0] += ` (${d.join(", ")})`;
     }
     if (S.a) out.push(`Откуда: ${S.a.name}`);
     if (S.b) out.push(`Куда: ${S.b.name}`);
@@ -262,7 +288,7 @@
   function saveHistory(text) {
     history.unshift({
       t: Date.now(), text, total: last.r.total,
-      state: { car: S.car, carText: $("#car").value, cat: S.cat, loaded: S.loaded, len: $("#len").value, hgt: $("#hgt").value,
+      state: { car: S.car, carText: $("#car").value, cat: S.cat, loaded: S.loaded, mass: $("#mass").value, cargo: $("#cargo").value, len: $("#len").value, hgt: $("#hgt").value,
         a: S.a, b: S.b, kmManual: $("#km-manual").value, extras: Object.assign({}, S.extras) }
     });
     history = history.slice(0, 50); store.set("evak.history", history);
@@ -280,7 +306,7 @@
     const li = e.target.closest("[data-h]"); if (!li) return;
     const s = history[+li.dataset.h].state;
     S.car = s.car; S.cat = s.cat; S.loaded = s.loaded; S.extras = Object.assign({}, s.extras);
-    $("#car").value = s.carText || ""; $("#len").value = s.len || ""; $("#hgt").value = s.hgt || ""; $("#km-manual").value = s.kmManual || "";
+    $("#car").value = s.carText || ""; $("#len").value = s.len || ""; $("#hgt").value = s.hgt || ""; $("#mass").value = s.mass || ""; $("#cargo").value = s.cargo || ""; $("#km-manual").value = s.kmManual || "";
     $$("#load-seg button").forEach(x => x.classList.toggle("on", (x.dataset.load === "1") === !!s.loaded));
     renderCats(); show("calc");
     S.a = null; S.b = null; setPoint("a", s.a); setPoint("b", s.b);
@@ -289,13 +315,15 @@
 
   // ---------- тарифы ----------
   const F_BASE = [["base", "Подача (цена по городу), ₽"], ["perKm", "За каждый км маршрута, ₽"]];
-  const F_HEAVY = [["loaded", "Гружёный, +₽"], ["lenLimit", "Длина без надбавки до, м"], ["lenFix", "Надбавка за длину, ₽"], ["lenPerM", "+ за каждый метр сверх, ₽"], ["hLimit", "Высота без надбавки до, м"], ["hFix", "Надбавка за высоту, ₽"]];
+  const F_TIER = [["hFrom", "Тяжёлый тариф с массы, т"], ["hBase", "Тяжёлый: подача, ₽"], ["hPerKm", "Тяжёлый: за км, ₽"]];
+  const F_HEAVY = [["lenLimit", "Длина без надбавки до, м"], ["lenFix", "Надбавка за длину, ₽"], ["lenPerM", "+ за каждый метр сверх, ₽"], ["hLimit", "Высота без надбавки до, м"], ["hFix", "Надбавка за высоту, ₽"]];
   const fld = (path, label, val) => `<label class="mini">${label}<input type="number" inputmode="decimal" step="any" min="0" data-path="${path}" value="${esc(val)}"></label>`;
   function renderSettings() {
     $("#cat-settings").innerHTML = Pricing.CATEGORIES.map(c => {
       const t = T.cats[c.id];
       let h = F_BASE.map(([k, l]) => fld(`cats.${c.id}.${k}`, l, t[k])).join("");
-      if (c.heavy) h += `<div class="sub">Груз и габариты</div>` + F_HEAVY.map(([k, l]) => fld(`cats.${c.id}.${k}`, l, t[k])).join("");
+      if (c.weight) h += `<div class="sub">${c.weight === "cargo" ? "Тяжёлый тариф (масса авто + груз)" : "Тяжёлый тариф (масса техники)"}</div>` + F_TIER.map(([k, l]) => fld(`cats.${c.id}.${k}`, l, t[k])).join("");
+      if (c.heavy) h += `<div class="sub">Габариты (0 — не считать)</div>` + F_HEAVY.map(([k, l]) => fld(`cats.${c.id}.${k}`, l, t[k])).join("");
       return `<details class="card cat-card"><summary>${esc(c.name)} <small style="color:var(--mute);font-weight:400;margin-left:auto;margin-right:8px">${rub(t.base)} + ${t.perKm} ₽/км</small></summary><div class="grid">${h}</div></details>`;
     }).join("");
     renderExtraSettings();

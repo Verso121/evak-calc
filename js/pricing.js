@@ -1,29 +1,26 @@
 // Тарифы по умолчанию (заглушки — меняются в приложении) и сам расчёт.
 (function (root) {
+  // weight: "cargo" — масса авто + груз; "own" — только масса техники
   const CATEGORIES = [
     { id: "L", name: "Легковой", heavy: false },
-    { id: "K", name: "Кроссовер / внедорожник", heavy: false },
+    { id: "K", name: "Кроссовер / внедорожник / микроавтобус", short: "Кроссовер / микроавтобус", heavy: false },
     { id: "M", name: "Мото / квадро", heavy: false },
-    { id: "C", name: "Коммерческий (Газель, фургон)", heavy: true },
-    { id: "B", name: "Автобус / микроавтобус", heavy: true },
-    { id: "T", name: "Грузовик до 5 т", heavy: true },
-    { id: "S", name: "Спецтехника до 5 т", heavy: true }
+    { id: "C", name: "Коммерческий до 5 т (Газель, фургон, автобус, грузовик)", short: "Коммерческий до 5 т", heavy: true, weight: "cargo", defMass: 2.5 },
+    { id: "S", name: "Спецтехника до 5 т", heavy: true, weight: "own", defMass: 3 }
   ];
 
   // base — подача (цена по городу), perKm — за каждый км маршрута.
-  // Для тяжёлых: loaded — надбавка «гружёный», lenLimit/lenFix/lenPerM — длина,
-  // hLimit/hFix — высота.
+  // Для C/S: hBase/hPerKm — тяжёлый тариф, включается с массы hFrom (т).
+  // lenLimit/lenFix/lenPerM — надбавка за длину, hLimit/hFix — за высоту (0 — выкл.).
   function defaultTariffs() {
     return {
-      version: 2,
+      version: 3,
       cats: {
-        L: { base: 3000, perKm: 60 },
-        K: { base: 3500, perKm: 70 },
-        M: { base: 2500, perKm: 50 },
-        C: { base: 5000, perKm: 90, loaded: 2000, lenLimit: 6, lenFix: 1500, lenPerM: 500, hLimit: 2.5, hFix: 1500 },
-        B: { base: 6000, perKm: 110, loaded: 2000, lenLimit: 7, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 },
-        T: { base: 7000, perKm: 120, loaded: 3000, lenLimit: 6.5, lenFix: 2000, lenPerM: 700, hLimit: 3, hFix: 2000 },
-        S: { base: 7000, perKm: 120, loaded: 2000, lenLimit: 5, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 }
+        L: { base: 3000, perKm: 70 },
+        K: { base: 3000, perKm: 70 },
+        M: { base: 3000, perKm: 70 },
+        C: { base: 4000, perKm: 100, hBase: 5000, hPerKm: 120, hFrom: 4.5, lenLimit: 0, lenFix: 0, lenPerM: 0, hLimit: 0, hFix: 0 },
+        S: { base: 5000, perKm: 100, hBase: 5000, hPerKm: 120, hFrom: 3, lenLimit: 0, lenFix: 0, lenPerM: 0, hLimit: 0, hFix: 0 }
       },
       // type: fixed — фикс., unit — за штуку/час, percent — % от суммы
       extras: [
@@ -41,7 +38,15 @@
 
   const num = v => (Number.isFinite(+v) ? +v : 0);
 
-  // input: { cat, loaded, length, height, km, feedKm, extras: {id: qty} }
+  // Масса для выбора тарифа: C — авто + груз (если гружёный), S — сама техника
+  function weightOf(meta, input) {
+    if (!meta || !meta.weight) return 0;
+    const own = num(input.mass) || meta.defMass;
+    return meta.weight === "cargo" && input.loaded ? own + num(input.cargo) : own;
+  }
+  const t1 = n => (Math.round(n * 10) / 10).toString().replace(".", ",");
+
+  // input: { cat, loaded, cargo, mass, length, height, km, feedKm, extras: {id: qty} }
   function calc(t, input) {
     const c = t.cats[input.cat];
     const meta = CATEGORIES.find(x => x.id === input.cat);
@@ -49,22 +54,28 @@
     if (!c) return { lines, total: 0 };
     const km = Math.ceil(Math.max(0, num(input.km)));
 
-    lines.push({ label: "Подача (цена по городу)", sum: num(c.base) });
-    if (km > 0) lines.push({ label: `Пробег ${km} км × ${num(c.perKm)} ₽`, sum: km * num(c.perKm) });
+    let base = num(c.base), perKm = num(c.perKm), tier = "";
+    const w = weightOf(meta, input);
+    if (meta && meta.weight) {
+      const heavy = num(c.hFrom) > 0 && w >= num(c.hFrom);
+      if (heavy) { base = num(c.hBase); perKm = num(c.hPerKm); }
+      tier = ` — ${heavy ? "тяжёлый" : "обычный"}, ~${t1(w)} т`;
+    }
+    lines.push({ label: `Подача (цена по городу)${tier}`, sum: base });
+    if (km > 0) lines.push({ label: `Пробег ${km} км × ${perKm} ₽`, sum: km * perKm });
 
     const feedKm = Math.ceil(Math.max(0, num(input.feedKm)));
     if (t.feed && t.feed.enabled && feedKm > 0)
       lines.push({ label: `Подача от базы ${feedKm} км × ${num(t.feed.perKm)} ₽`, sum: feedKm * num(t.feed.perKm) });
 
     if (meta && meta.heavy) {
-      if (input.loaded && num(c.loaded)) lines.push({ label: "Гружёный", sum: num(c.loaded) });
       const len = num(input.length), lim = num(c.lenLimit);
-      if (len > 0 && lim > 0 && len > lim) {
+      if (len > 0 && lim > 0 && len > lim && (num(c.lenFix) || num(c.lenPerM))) {
         const extraM = Math.ceil(Math.round((len - lim) * 1000) / 100) / 10;
         lines.push({ label: `Длина ${len} м (свыше ${lim} м)`, sum: num(c.lenFix) + Math.ceil(extraM * num(c.lenPerM)) });
       }
       const h = num(input.height), hl = num(c.hLimit);
-      if (h > 0 && hl > 0 && h > hl) lines.push({ label: `Высота ${h} м (свыше ${hl} м)`, sum: num(c.hFix) });
+      if (h > 0 && hl > 0 && h > hl && num(c.hFix)) lines.push({ label: `Высота ${h} м (свыше ${hl} м)`, sum: num(c.hFix) });
     }
 
     const sel = input.extras || {};
@@ -88,7 +99,7 @@
     }
     const step = num(t.roundStep);
     const rounded = step > 0 ? Math.ceil(total / step) * step : total;
-    return { lines, raw: total, total: rounded };
+    return { lines, raw: total, total: rounded, weight: w };
   }
 
   // Подмешивает недостающие поля из умолчаний (после обновлений приложения)
@@ -97,10 +108,9 @@
     if (!saved || typeof saved !== "object") return d;
     const out = Object.assign({}, d, saved);
     out.cats = {};
-    for (const id of Object.keys(d.cats)) {
-      out.cats[id] = Object.assign({}, d.cats[id], (saved.cats || {})[id]);
-      delete out.cats[id].includedKm; // больше не используется: км считаются полностью
-    }
+    // v3: новые категории и цены — старые цены категорий заменяются
+    const keepCats = (saved.version || 1) >= 3 ? saved.cats || {} : {};
+    for (const id of Object.keys(d.cats)) out.cats[id] = Object.assign({}, d.cats[id], keepCats[id]);
     out.feed = Object.assign({}, d.feed, saved.feed);
     // v2: новый набор надбавок — заменяем старый список целиком
     if (!Array.isArray(saved.extras) || (saved.version || 1) < 2) out.extras = d.extras;
@@ -108,7 +118,7 @@
     return out;
   }
 
-  const api = { CATEGORIES, defaultTariffs, calc, migrate };
+  const api = { CATEGORIES, defaultTariffs, calc, migrate, weightOf };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Pricing = api;
 })(typeof self !== "undefined" ? self : this);
