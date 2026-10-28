@@ -10,20 +10,20 @@
     { id: "S", name: "Спецтехника до 5 т", heavy: true }
   ];
 
-  // base — подача/погрузка (включает includedKm км), perKm — за каждый км сверх.
+  // base — подача (цена по городу), perKm — за каждый км маршрута.
   // Для тяжёлых: loaded — надбавка «гружёный», lenLimit/lenFix/lenPerM — длина,
   // hLimit/hFix — высота.
   function defaultTariffs() {
     return {
       version: 1,
       cats: {
-        L: { base: 3000, includedKm: 10, perKm: 60 },
-        K: { base: 3500, includedKm: 10, perKm: 70 },
-        M: { base: 2500, includedKm: 10, perKm: 50 },
-        C: { base: 5000, includedKm: 10, perKm: 90, loaded: 2000, lenLimit: 6, lenFix: 1500, lenPerM: 500, hLimit: 2.5, hFix: 1500 },
-        B: { base: 6000, includedKm: 10, perKm: 110, loaded: 2000, lenLimit: 7, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 },
-        T: { base: 7000, includedKm: 10, perKm: 120, loaded: 3000, lenLimit: 6.5, lenFix: 2000, lenPerM: 700, hLimit: 3, hFix: 2000 },
-        S: { base: 7000, includedKm: 10, perKm: 120, loaded: 2000, lenLimit: 5, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 }
+        L: { base: 3000, perKm: 60 },
+        K: { base: 3500, perKm: 70 },
+        M: { base: 2500, perKm: 50 },
+        C: { base: 5000, perKm: 90, loaded: 2000, lenLimit: 6, lenFix: 1500, lenPerM: 500, hLimit: 2.5, hFix: 1500 },
+        B: { base: 6000, perKm: 110, loaded: 2000, lenLimit: 7, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 },
+        T: { base: 7000, perKm: 120, loaded: 3000, lenLimit: 6.5, lenFix: 2000, lenPerM: 700, hLimit: 3, hFix: 2000 },
+        S: { base: 7000, perKm: 120, loaded: 2000, lenLimit: 5, lenFix: 2000, lenPerM: 700, hLimit: 2.8, hFix: 2000 }
       },
       // type: fixed — фикс., unit — за штуку/час, percent — % от суммы
       extras: [
@@ -53,9 +53,8 @@
     if (!c) return { lines, total: 0 };
     const km = Math.ceil(Math.max(0, num(input.km)));
 
-    lines.push({ label: `Подача и погрузка (вкл. ${num(c.includedKm)} км)`, sum: num(c.base) });
-    const over = Math.max(0, km - num(c.includedKm));
-    if (over > 0) lines.push({ label: num(c.includedKm) > 0 ? `Пробег ${km} км − ${num(c.includedKm)} включено = ${over} км × ${num(c.perKm)} ₽` : `Пробег ${over} км × ${num(c.perKm)} ₽`, sum: over * num(c.perKm) });
+    lines.push({ label: "Подача (цена по городу)", sum: num(c.base) });
+    if (km > 0) lines.push({ label: `Пробег ${km} км × ${num(c.perKm)} ₽`, sum: km * num(c.perKm) });
 
     const feedKm = Math.ceil(Math.max(0, num(input.feedKm)));
     if (t.feed && t.feed.enabled && feedKm > 0)
@@ -102,7 +101,10 @@
     if (!saved || typeof saved !== "object") return d;
     const out = Object.assign({}, d, saved);
     out.cats = {};
-    for (const id of Object.keys(d.cats)) out.cats[id] = Object.assign({}, d.cats[id], (saved.cats || {})[id]);
+    for (const id of Object.keys(d.cats)) {
+      out.cats[id] = Object.assign({}, d.cats[id], (saved.cats || {})[id]);
+      delete out.cats[id].includedKm; // больше не используется: км считаются полностью
+    }
     out.feed = Object.assign({}, d.feed, saved.feed);
     if (!Array.isArray(saved.extras)) out.extras = d.extras;
     return out;

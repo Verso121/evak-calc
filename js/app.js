@@ -288,7 +288,7 @@
   $("#clear-history").addEventListener("click", () => { if (confirm("Очистить историю?")) { history = []; store.set("evak.history", history); renderHistory(); } });
 
   // ---------- тарифы ----------
-  const F_BASE = [["base", "Подача и погрузка, ₽"], ["includedKm", "Км включено в подачу"], ["perKm", "За км сверх, ₽"]];
+  const F_BASE = [["base", "Подача (цена по городу), ₽"], ["perKm", "За каждый км маршрута, ₽"]];
   const F_HEAVY = [["loaded", "Гружёный, +₽"], ["lenLimit", "Длина без надбавки до, м"], ["lenFix", "Надбавка за длину, ₽"], ["lenPerM", "+ за каждый метр сверх, ₽"], ["hLimit", "Высота без надбавки до, м"], ["hFix", "Надбавка за высоту, ₽"]];
   const fld = (path, label, val) => `<label class="mini">${label}<input type="number" inputmode="decimal" step="any" min="0" data-path="${path}" value="${esc(val)}"></label>`;
   function renderSettings() {

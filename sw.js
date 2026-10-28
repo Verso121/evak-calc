@@ -1,5 +1,5 @@
 // Офлайн-кэш: свои файлы — сначала сеть (чтобы обновления приходили сразу), при отсутствии сети — из кэша.
-const CACHE = "evak-v2";
+const CACHE = "evak-v3";
 const SHELL = ["./", "index.html", "css/style.css", "js/cars.js", "js/pricing.js", "js/geo.js", "js/app.js",
   "manifest.webmanifest", "icons/icon-192.png",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"];
