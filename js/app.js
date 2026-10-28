@@ -57,13 +57,18 @@
       else if (e.key === "Enter") { const it = items[sel >= 0 ? sel : 0]; if (it && !it.disabled) { onPick(it); close(); input.blur(); } e.preventDefault(); }
       else if (e.key === "Escape") close();
     });
-    list.addEventListener("pointerdown", e => {
+    // Выбор — по click (срабатывает только на тап, не на прокрутку пальцем)
+    list.addEventListener("click", e => {
       const li = e.target.closest("li"); if (!li) return;
-      e.preventDefault();
       const it = items[+li.dataset.i];
       if (it && !it.disabled) { onPick(it); close(); input.blur(); }
     });
-    input.addEventListener("blur", () => setTimeout(close, 150));
+    // На ПК не даём полю терять фокус при клике по списку
+    list.addEventListener("mousedown", e => e.preventDefault());
+    // Закрываем список только при нажатии вне поля и списка
+    const wrap = input.closest(".field") || input.parentNode;
+    document.addEventListener("pointerdown", e => { if (!wrap.contains(e.target)) close(); });
+    input.addEventListener("keydown", e => { if (e.key === "Tab") close(); });
   }
 
   // ---------- транспорт ----------

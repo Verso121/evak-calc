@@ -38,7 +38,7 @@ input:focus, select:focus { border-color: var(--acc); }
 .field { position: relative; flex: 1; min-width: 0; }
 .suggest { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 1100; list-style: none; margin: 0; padding: 4px;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
-  max-height: 300px; overflow: auto; display: none; }
+  max-height: 300px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; display: none; }
 .suggest.open { display: block; }
 .suggest li { padding: 10px; border-radius: 8px; cursor: pointer; }
 .suggest li:hover, .suggest li.sel { background: var(--field); }
