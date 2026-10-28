@@ -1,4 +1,5 @@
-// Поиск адресов и маршрут: Яндекс (если подключён), при сбое — Photon / OSRM (OpenStreetMap).
+// Поиск адресов (Photon) и маршрут (OSRM) — OpenStreetMap, ключи не нужны.
+// yandexLink — только для кнопки «Навигатор».
 (function (root) {
   const PHOTON = "https://photon.komoot.io";
   const OSRM = "https://router.project-osrm.org";
@@ -44,7 +45,6 @@
     if (j.code !== "Ok" || !j.routes || !j.routes.length) throw new Error("Маршрут не найден");
     const rt = j.routes[0];
     return {
-      by: "osm",
       km: rt.distance / 1000,
       min: rt.duration / 60,
       coords: rt.geometry.coordinates.map(([lon, lat]) => [lat, lon])
@@ -55,40 +55,7 @@
     return `https://yandex.ru/maps/?rtext=${a.lat},${a.lon}~${b.lat},${b.lon}&rtt=auto`;
   }
 
-  // ----- Яндекс -----
-  let Y = null;
-  function useYandex(ymaps) { Y = ymaps; }
-  const yName = o => o.getAddressLine ? o.getAddressLine() : (o.properties.get("text") || o.properties.get("name") || "");
+  const search = osmSearch, reverse = osmReverse, route = osmRoute;
 
-  async function ySearch(q, near) {
-    const opts = { results: 7 };
-    if (near) opts.boundedBy = [[near.lat - 1.5, near.lon - 2], [near.lat + 1.5, near.lon + 2]];
-    const res = await Y.geocode(q, opts);
-    const out = [];
-    res.geoObjects.each(o => { const [lat, lon] = o.geometry.getCoordinates(); out.push({ name: yName(o), lat, lon }); });
-    return out;
-  }
-  async function yReverse(lat, lon) {
-    const res = await Y.geocode([lat, lon], { results: 1 });
-    const o = res.geoObjects.get(0);
-    return o ? yName(o) : `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-  }
-  async function yRoute(a, b) {
-    const r = await Y.route([[a.lat, a.lon], [b.lat, b.lon]], { routingMode: "auto", mapStateAutoApply: false });
-    const coords = [];
-    r.getPaths().each(p => coords.push(...p.geometry.getCoordinates()));
-    return { km: r.getLength() / 1000, min: r.getTime() / 60, coords, by: "yandex" };
-  }
-
-  // Сначала Яндекс, при ошибке (лимит, сбой) — OpenStreetMap
-  const withFallback = (yf, of) => async (...args) => {
-    if (Y) { try { return await yf(...args); } catch (e) { console.warn("Яндекс недоступен, использую OSM:", e && e.message); } }
-    return of(...args);
-  };
-  const search = withFallback(ySearch, osmSearch);
-  const reverse = withFallback(yReverse, osmReverse);
-  const route = withFallback(yRoute, osmRoute);
-  const provider = () => (Y ? "yandex" : "osm");
-
-  root.Geo = { search, reverse, route, yandexLink, useYandex, provider };
+  root.Geo = { search, reverse, route, yandexLink };
 })(self);
