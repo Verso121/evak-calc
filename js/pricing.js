@@ -15,7 +15,7 @@
   // hLimit/hFix — высота.
   function defaultTariffs() {
     return {
-      version: 1,
+      version: 2,
       cats: {
         L: { base: 3000, perKm: 60 },
         K: { base: 3500, perKm: 70 },
@@ -27,15 +27,11 @@
       },
       // type: fixed — фикс., unit — за штуку/час, percent — % от суммы
       extras: [
-        { id: "ditch", name: "В кювете (вытаскивание)", type: "fixed", price: 2000 },
-        { id: "wheel", name: "Заблокировано колесо", type: "unit", price: 500, unitName: "шт", max: 4 },
-        { id: "steer", name: "Заблокирован руль", type: "fixed", price: 500 },
-        { id: "gear", name: "Заблокирована КПП / паркинг", type: "fixed", price: 1000 },
-        { id: "low", name: "Низкая посадка", type: "fixed", price: 500 },
-        { id: "crash", name: "После ДТП / сильные повреждения", type: "fixed", price: 1000 },
-        { id: "wait", name: "Ожидание", type: "unit", price: 500, unitName: "ч", max: 24 },
-        { id: "night", name: "Ночь (22:00–06:00)", type: "percent", price: 20 },
-        { id: "urgent", name: "Срочно", type: "percent", price: 15 }
+        { id: "ditch", name: "В кювете (вытаскивание)", type: "fixed", price: 3000 },
+        { id: "wheel", name: "Заблокировано колесо", type: "unit", price: 1000, unitName: "шт", max: 4 },
+        { id: "steer", name: "Заблокирован руль (2 подката)", type: "fixed", price: 1500 },
+        { id: "gear", name: "Заблокирована КПП / паркинг (2 телеги)", type: "fixed", price: 1500 },
+        { id: "crash", name: "После ДТП / сильные повреждения", type: "fixed", price: 3000 }
       ],
       feed: { enabled: false, perKm: 40, baseName: "", baseLat: null, baseLon: null },
       roundStep: 100,
@@ -106,7 +102,9 @@
       delete out.cats[id].includedKm; // больше не используется: км считаются полностью
     }
     out.feed = Object.assign({}, d.feed, saved.feed);
-    if (!Array.isArray(saved.extras)) out.extras = d.extras;
+    // v2: новый набор надбавок — заменяем старый список целиком
+    if (!Array.isArray(saved.extras) || (saved.version || 1) < 2) out.extras = d.extras;
+    out.version = d.version;
     return out;
   }
 
