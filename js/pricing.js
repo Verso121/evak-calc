@@ -13,7 +13,7 @@
   // Для C/S: hBase/hPerKm — тяжёлый тариф, включается с массы hFrom (т).
   function defaultTariffs() {
     return {
-      version: 4,
+      version: 5,
       cats: {
         L: { base: 3000, perKm: 70 },
         K: { base: 3000, perKm: 70 },
@@ -29,8 +29,7 @@
         { id: "gear", name: "Заблокирована КПП / паркинг (2 телеги)", type: "fixed", price: 1500 },
         { id: "crash", name: "После ДТП / сильные повреждения", type: "fixed", price: 3000 }
       ],
-      feed: { enabled: false, perKm: 40, baseName: "", baseLat: null, baseLon: null },
-      roundStep: 100,
+      roundStep: 500, // до ближайших 500: 1600→1500, 1700→1500, 1800→2000
       minTotal: 0
     };
   }
@@ -45,7 +44,7 @@
   }
   const t1 = n => (Math.round(n * 10) / 10).toString().replace(".", ",");
 
-  // input: { cat, loaded, cargo, mass, km, feedKm, extras: {id: qty} }
+  // input: { cat, loaded, cargo, mass, km, extras: {id: qty} }
   function calc(t, input) {
     const c = t.cats[input.cat];
     const meta = CATEGORIES.find(x => x.id === input.cat);
@@ -63,9 +62,6 @@
     lines.push({ label: `Подача (цена по городу)${tier}`, sum: base });
     if (km > 0) lines.push({ label: `Пробег ${km} км × ${perKm} ₽`, sum: km * perKm });
 
-    const feedKm = Math.ceil(Math.max(0, num(input.feedKm)));
-    if (t.feed && t.feed.enabled && feedKm > 0)
-      lines.push({ label: `Подача от базы ${feedKm} км × ${num(t.feed.perKm)} ₽`, sum: feedKm * num(t.feed.perKm) });
 
 
     const sel = input.extras || {};
@@ -88,7 +84,7 @@
       total = num(t.minTotal);
     }
     const step = num(t.roundStep);
-    const rounded = step > 0 ? Math.ceil(total / step) * step : total;
+    const rounded = step > 0 ? Math.round(total / step) * step : total; // ровно посередине — вверх
     return { lines, raw: total, total: rounded, weight: w };
   }
 
@@ -105,7 +101,8 @@
       ["lenLimit", "lenFix", "lenPerM", "hLimit", "hFix"].forEach(k => delete cat[k]); // габариты не считаются
       if ((saved.version || 1) < 4 && d.cats[id].hFrom) cat.hFrom = d.cats[id].hFrom;   // v4: новые пороги массы
     }
-    out.feed = Object.assign({}, d.feed, saved.feed);
+    delete out.feed; // подача от базы больше не считается
+    if ((saved.version || 1) < 5) out.roundStep = d.roundStep; // v5: округление до 500
     // v2: новый набор надбавок — заменяем старый список целиком
     if (!Array.isArray(saved.extras) || (saved.version || 1) < 2) out.extras = d.extras;
     out.version = d.version;

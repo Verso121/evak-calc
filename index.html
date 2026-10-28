@@ -67,7 +67,6 @@
     <div class="route-info">
       <div><span id="r-km">—</span><small>км</small></div>
       <div><span id="r-min">—</span><small>в пути</small></div>
-      <div id="r-feed-wrap" class="hidden"><span id="r-feed">—</span><small>подача от базы, км</small></div>
     </div>
     <label class="manual">Км вручную (если нет связи):
       <input id="km-manual" type="number" inputmode="decimal" min="0" placeholder="авто">
@@ -107,19 +106,10 @@
     <button id="add-extra" class="ghost wide">+ Добавить пункт</button>
   </section>
 
-  <section class="card">
-    <h2>Подача от базы</h2>
-    <label class="switch"><input type="checkbox" id="feed-on"> Считать км от базы до точки A</label>
-    <div class="field ac">
-      <input id="base-addr" type="search" placeholder="Адрес базы / стоянки" autocomplete="off">
-      <ul class="suggest" id="base-list"></ul>
-    </div>
-    <label class="mini">Цена за км подачи, ₽<input id="feed-km" type="number" inputmode="numeric" min="0"></label>
-  </section>
 
   <section class="card">
     <h2>Общее</h2>
-    <label class="mini">Округлять итог вверх до, ₽<input id="round" type="number" inputmode="numeric" min="0"></label>
+    <label class="mini">Округлять итог до ближайших, ₽ (0 — не округлять)<input id="round" type="number" inputmode="numeric" min="0"></label>
     <label class="mini">Минимальный заказ, ₽ (0 — нет)<input id="min-total" type="number" inputmode="numeric" min="0"></label>
     <label class="switch"><input type="checkbox" id="share-detail"> В сообщении клиенту показывать разбивку</label>
   </section>

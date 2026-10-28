@@ -16,7 +16,7 @@
   const saveT = () => store.set("evak.tariffs", T);
   const saveP = () => store.set("evak.prefs", prefs);
 
-  const S = { car: null, cat: "L", loaded: false, a: null, b: null, km: null, min: null, feedKm: null, extras: {}, pick: null };
+  const S = { car: null, cat: "L", loaded: false, a: null, b: null, km: null, min: null, extras: {}, pick: null };
 
   function toast(msg) {
     const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -115,7 +115,6 @@
       p.name = await Geo.reverse(p.lat, p.lon);
       $(which === "a" ? "#pa" : "#pb").value = p.name;
     });
-    if (T.feed.baseLat != null) map.setView([T.feed.baseLat, T.feed.baseLon], 10);
   }
   function setPick(which) {
     S.pick = which;
@@ -157,25 +156,15 @@
         $("#route-err").classList.remove("hidden");
       }
     }
-    await updateFeed(my);
     if (my === routeSeq) { drawRouteInfo(); recalc(); }
-  }
-  async function updateFeed(my) {
-    S.feedKm = null;
-    const f = T.feed;
-    if (!(f.enabled && f.baseLat != null && S.a)) return;
-    try { const r = await Geo.route({ lat: f.baseLat, lon: f.baseLon }, S.a); if (my === routeSeq) S.feedKm = r.km; } catch (e) { /* без подачи */ }
   }
   function drawRouteInfo() {
     $("#r-km").textContent = S.km != null ? S.km.toFixed(1).replace(".", ",") : "—";
     if (S.min != null) { const h = Math.floor(S.min / 60), m = Math.round(S.min % 60); $("#r-min").textContent = h ? `${h} ч ${m} м` : `${m} мин`; }
     else $("#r-min").textContent = "—";
-    const showFeed = T.feed.enabled && T.feed.baseLat != null;
-    $("#r-feed-wrap").classList.toggle("hidden", !showFeed);
-    $("#r-feed").textContent = S.feedKm != null ? S.feedKm.toFixed(1).replace(".", ",") : "—";
   }
 
-  const near = () => S.a || (T.feed.baseLat != null ? { lat: T.feed.baseLat, lon: T.feed.baseLon } : null);
+  const near = () => S.a || S.b || null;
   const addrFetch = async q => (await Geo.search(q, near())).map(p => ({ label: p.name, p }));
   autocomplete($("#pa"), $("#pa-list"), addrFetch, it => setPoint("a", it.p), 450);
   autocomplete($("#pb"), $("#pb-list"), addrFetch, it => setPoint("b", it.p), 450);
@@ -227,12 +216,12 @@
       cat: S.cat, loaded: S.loaded,
       mass: parseFloat(String($("#mass").value).replace(",", ".")) || 0,
       cargo: parseFloat(String($("#cargo").value).replace(",", ".")) || 0,
-      km: currentKm(), feedKm: S.feedKm || 0, extras: S.extras
+      km: currentKm(), extras: S.extras
     };
     const r = Pricing.calc(T, input);
     last = { input, r };
     $("#lines").innerHTML = r.lines.map(l => `<li><span>${esc(l.label)}</span><b>${rub(l.sum)}</b></li>`).join("")
-      + (r.total !== r.raw ? `<li class="round"><span>Округление</span><b>+${rub(r.total - r.raw)}</b></li>` : "");
+      + (r.total !== r.raw ? `<li class="round"><span>Округление (было ${rub(r.raw)})</span><b>${r.total > r.raw ? "+" : "−"}${rub(Math.abs(r.total - r.raw))}</b></li>` : "");
     $("#total").textContent = rub(r.total);
     const m = catMeta();
     if (m.weight) {
@@ -321,9 +310,6 @@
       return `<details class="card cat-card"><summary>${esc(c.name)} <small style="color:var(--mute);font-weight:400;margin-left:auto;margin-right:8px">${rub(t.base)} + ${t.perKm} ₽/км</small></summary><div class="grid">${h}</div></details>`;
     }).join("");
     renderExtraSettings();
-    $("#feed-on").checked = !!T.feed.enabled;
-    $("#base-addr").value = T.feed.baseName || "";
-    $("#feed-km").value = T.feed.perKm;
     $("#round").value = T.roundStep;
     $("#min-total").value = T.minTotal;
     $("#share-detail").checked = !!prefs.shareDetail;
@@ -371,10 +357,6 @@
     const inputs = $$("#extra-settings .name"); const last = inputs[inputs.length - 1]; last.focus(); last.select();
   });
 
-  $("#feed-on").addEventListener("change", e => { T.feed.enabled = e.target.checked; saveT(); updateRoute(); });
-  $("#feed-km").addEventListener("input", e => { T.feed.perKm = +e.target.value || 0; saveT(); });
-  autocomplete($("#base-addr"), $("#base-list"), async q => (await Geo.search(q, null)).map(p => ({ label: p.name, p })),
-    it => { T.feed.baseName = it.p.name; T.feed.baseLat = it.p.lat; T.feed.baseLon = it.p.lon; saveT(); toast("База сохранена"); updateRoute(); }, 450);
   $("#round").addEventListener("input", e => { T.roundStep = +e.target.value || 0; saveT(); });
   $("#min-total").addEventListener("input", e => { T.minTotal = +e.target.value || 0; saveT(); });
   $("#share-detail").addEventListener("change", e => { prefs.shareDetail = e.target.checked; saveP(); });
