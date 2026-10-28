@@ -1,6 +1,6 @@
 // Офлайн-кэш: свои файлы — сначала сеть (чтобы обновления приходили сразу), при отсутствии сети — из кэша.
-const CACHE = "evak-v9";
-const SHELL = ["./", "index.html", "css/style.css", "js/cars.js", "js/pricing.js", "js/geo.js", "js/app.js",
+const CACHE = "evak-v10";
+const SHELL = ["./", "index.html", "css/style.css", "js/cars.js", "js/pricing.js", "js/config.js", "js/geo.js", "js/mapview.js", "js/app.js",
   "manifest.webmanifest", "icons/icon-192.png",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });

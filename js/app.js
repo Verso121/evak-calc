@@ -29,7 +29,7 @@
     document.body.classList.toggle("on-calc", view === "calc");
     if (view === "settings") renderSettings();
     if (view === "history") renderHistory();
-    if (view === "calc") { renderExtras(); recalc(); setTimeout(() => map && map.invalidateSize(), 50); }
+    if (view === "calc") { renderExtras(); recalc(); setTimeout(() => map && map.refresh(), 50); }
     window.scrollTo(0, 0);
   }
   $$("[data-view]").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
@@ -106,20 +106,17 @@
   ["#mass", "#cargo"].forEach(id => $(id).addEventListener("input", recalc));
 
   // ---------- карта ----------
-  let map = null, mA = null, mB = null, line = null;
-  const icon = (txt, color) => L.divIcon({ className: "", html: `<div class="mk" style="background:${color}"><span>${txt}</span></div>`, iconSize: [28, 28], iconAnchor: [14, 28] });
-  function initMap() {
-    if (typeof L === "undefined") { $("#map").innerHTML = '<p class="note" style="padding:12px">Карта не загрузилась — нет интернета. Км можно ввести вручную.</p>'; return; }
-    map = L.map("map", { zoomControl: true, attributionControl: true }).setView([45.04, 38.98], 8);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
-    map.on("click", async e => {
+  let map = null;
+  async function initMap() {
+    map = await MapView.create($("#map"), async (lat, lon) => {
       if (!S.pick) return;
       const which = S.pick; setPick(null);
-      const p = { lat: e.latlng.lat, lon: e.latlng.lng, name: "…" };
+      const p = { lat, lon, name: "…" };
       setPoint(which, p);
-      p.name = await Geo.reverse(p.lat, p.lon);
+      p.name = await Geo.reverse(lat, lon);
       $(which === "a" ? "#pa" : "#pb").value = p.name;
     });
+    if (map) { map.marker("a", S.a); map.marker("b", S.b); if (S.a && S.b) updateRoute(); }
   }
   function setPick(which) {
     S.pick = which;
@@ -132,12 +129,8 @@
     S[which] = p;
     $(which === "a" ? "#pa" : "#pb").value = p ? p.name : "";
     if (map) {
-      const ref = which === "a" ? "mA" : "mB";
-      const cur = which === "a" ? mA : mB;
-      if (cur) map.removeLayer(cur);
-      const m = p ? L.marker([p.lat, p.lon], { icon: icon(which.toUpperCase(), which === "a" ? "#3ecf8e" : "#ff6b4a") }).addTo(map) : null;
-      if (ref === "mA") mA = m; else mB = m;
-      if (p && !(S.a && S.b)) map.setView([p.lat, p.lon], 13);
+      map.marker(which, p);
+      if (p && !(S.a && S.b)) map.setView(p.lat, p.lon, 13);
     }
     updateRoute();
   }
@@ -146,7 +139,7 @@
   async function updateRoute() {
     const my = ++routeSeq;
     $("#route-err").classList.add("hidden");
-    if (line && map) { map.removeLayer(line); line = null; }
+    if (map) map.line(null);
     S.km = null; S.min = null;
     if (S.a && S.b) {
       $("#r-km").textContent = "…";
@@ -154,7 +147,7 @@
         const r = await Geo.route(S.a, S.b);
         if (my !== routeSeq) return;
         S.km = r.km; S.min = r.min;
-        if (map) { line = L.polyline(r.coords, { color: "#f5b301", weight: 5, opacity: .9 }).addTo(map); map.fitBounds(line.getBounds(), { padding: [30, 30] }); }
+        if (map) map.line(r.coords);
       } catch (e) {
         if (my !== routeSeq) return;
         $("#route-err").textContent = (e.message || "Ошибка маршрута") + ". Введи км вручную.";
