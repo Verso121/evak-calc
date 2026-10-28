@@ -16,6 +16,7 @@
     const u = new URL(PHOTON + "/api/");
     u.searchParams.set("q", q);
     u.searchParams.set("limit", "7");
+    u.searchParams.set("lang", "default"); // местные названия (по-русски), а не язык телефона
     if (near) { u.searchParams.set("lat", near.lat); u.searchParams.set("lon", near.lon); }
     const r = await fetch(u);
     if (!r.ok) throw new Error("Поиск адреса недоступен");
@@ -27,7 +28,7 @@
 
   async function osmReverse(lat, lon) {
     try {
-      const r = await fetch(`${PHOTON}/reverse?lat=${lat}&lon=${lon}`);
+      const r = await fetch(`${PHOTON}/reverse?lat=${lat}&lon=${lon}&lang=default`);
       const j = await r.json();
       const f = (j.features || [])[0];
       if (f) return label(f);
