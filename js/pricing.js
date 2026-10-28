@@ -11,16 +11,15 @@
 
   // base — подача (цена по городу), perKm — за каждый км маршрута.
   // Для C/S: hBase/hPerKm — тяжёлый тариф, включается с массы hFrom (т).
-  // lenLimit/lenFix/lenPerM — надбавка за длину, hLimit/hFix — за высоту (0 — выкл.).
   function defaultTariffs() {
     return {
-      version: 3,
+      version: 4,
       cats: {
         L: { base: 3000, perKm: 70 },
         K: { base: 3000, perKm: 70 },
         M: { base: 3000, perKm: 70 },
-        C: { base: 4000, perKm: 100, hBase: 5000, hPerKm: 120, hFrom: 4.5, lenLimit: 0, lenFix: 0, lenPerM: 0, hLimit: 0, hFix: 0 },
-        S: { base: 5000, perKm: 100, hBase: 5000, hPerKm: 120, hFrom: 3, lenLimit: 0, lenFix: 0, lenPerM: 0, hLimit: 0, hFix: 0 }
+        C: { base: 4000, perKm: 100, hBase: 5000, hPerKm: 120, hFrom: 3.5 },
+        S: { base: 5000, perKm: 100, hBase: 5000, hPerKm: 120, hFrom: 4 }
       },
       // type: fixed — фикс., unit — за штуку/час, percent — % от суммы
       extras: [
@@ -46,7 +45,7 @@
   }
   const t1 = n => (Math.round(n * 10) / 10).toString().replace(".", ",");
 
-  // input: { cat, loaded, cargo, mass, length, height, km, feedKm, extras: {id: qty} }
+  // input: { cat, loaded, cargo, mass, km, feedKm, extras: {id: qty} }
   function calc(t, input) {
     const c = t.cats[input.cat];
     const meta = CATEGORIES.find(x => x.id === input.cat);
@@ -68,15 +67,6 @@
     if (t.feed && t.feed.enabled && feedKm > 0)
       lines.push({ label: `Подача от базы ${feedKm} км × ${num(t.feed.perKm)} ₽`, sum: feedKm * num(t.feed.perKm) });
 
-    if (meta && meta.heavy) {
-      const len = num(input.length), lim = num(c.lenLimit);
-      if (len > 0 && lim > 0 && len > lim && (num(c.lenFix) || num(c.lenPerM))) {
-        const extraM = Math.ceil(Math.round((len - lim) * 1000) / 100) / 10;
-        lines.push({ label: `Длина ${len} м (свыше ${lim} м)`, sum: num(c.lenFix) + Math.ceil(extraM * num(c.lenPerM)) });
-      }
-      const h = num(input.height), hl = num(c.hLimit);
-      if (h > 0 && hl > 0 && h > hl && num(c.hFix)) lines.push({ label: `Высота ${h} м (свыше ${hl} м)`, sum: num(c.hFix) });
-    }
 
     const sel = input.extras || {};
     const percents = [];
@@ -110,7 +100,11 @@
     out.cats = {};
     // v3: новые категории и цены — старые цены категорий заменяются
     const keepCats = (saved.version || 1) >= 3 ? saved.cats || {} : {};
-    for (const id of Object.keys(d.cats)) out.cats[id] = Object.assign({}, d.cats[id], keepCats[id]);
+    for (const id of Object.keys(d.cats)) {
+      const cat = out.cats[id] = Object.assign({}, d.cats[id], keepCats[id]);
+      ["lenLimit", "lenFix", "lenPerM", "hLimit", "hFix"].forEach(k => delete cat[k]); // габариты не считаются
+      if ((saved.version || 1) < 4 && d.cats[id].hFrom) cat.hFrom = d.cats[id].hFrom;   // v4: новые пороги массы
+    }
     out.feed = Object.assign({}, d.feed, saved.feed);
     // v2: новый набор надбавок — заменяем старый список целиком
     if (!Array.isArray(saved.extras) || (saved.version || 1) < 2) out.extras = d.extras;

@@ -99,7 +99,6 @@
     if (S.loaded) $("#cargo").focus();
   });
   ["#mass", "#cargo"].forEach(id => $(id).addEventListener("input", recalc));
-  ["#len", "#hgt"].forEach(id => $(id).addEventListener("input", recalc));
 
   // ---------- карта ----------
   let map = null, mA = null, mB = null, line = null;
@@ -228,8 +227,6 @@
       cat: S.cat, loaded: S.loaded,
       mass: parseFloat(String($("#mass").value).replace(",", ".")) || 0,
       cargo: parseFloat(String($("#cargo").value).replace(",", ".")) || 0,
-      length: parseFloat(String($("#len").value).replace(",", ".")) || 0,
-      height: parseFloat(String($("#hgt").value).replace(",", ".")) || 0,
       km: currentKm(), feedKm: S.feedKm || 0, extras: S.extras
     };
     const r = Pricing.calc(T, input);
@@ -257,7 +254,6 @@
       const m = catMeta(), d = [];
       if (m.weight === "cargo") d.push(S.loaded ? `гружёный${input.cargo ? ", груз " + input.cargo + " т" : ""}` : "пустой");
       else if (input.mass) d.push(`масса ${input.mass} т`);
-      if (input.length) d.push(`длина ${input.length} м`); if (input.height) d.push(`высота ${input.height} м`);
       if (d.length) out[0] += ` (${d.join(", ")})`;
     }
     if (S.a) out.push(`Откуда: ${S.a.name}`);
@@ -288,7 +284,7 @@
   function saveHistory(text) {
     history.unshift({
       t: Date.now(), text, total: last.r.total,
-      state: { car: S.car, carText: $("#car").value, cat: S.cat, loaded: S.loaded, mass: $("#mass").value, cargo: $("#cargo").value, len: $("#len").value, hgt: $("#hgt").value,
+      state: { car: S.car, carText: $("#car").value, cat: S.cat, loaded: S.loaded, mass: $("#mass").value, cargo: $("#cargo").value,
         a: S.a, b: S.b, kmManual: $("#km-manual").value, extras: Object.assign({}, S.extras) }
     });
     history = history.slice(0, 50); store.set("evak.history", history);
@@ -306,7 +302,7 @@
     const li = e.target.closest("[data-h]"); if (!li) return;
     const s = history[+li.dataset.h].state;
     S.car = s.car; S.cat = s.cat; S.loaded = s.loaded; S.extras = Object.assign({}, s.extras);
-    $("#car").value = s.carText || ""; $("#len").value = s.len || ""; $("#hgt").value = s.hgt || ""; $("#mass").value = s.mass || ""; $("#cargo").value = s.cargo || ""; $("#km-manual").value = s.kmManual || "";
+    $("#car").value = s.carText || ""; $("#mass").value = s.mass || ""; $("#cargo").value = s.cargo || ""; $("#km-manual").value = s.kmManual || "";
     $$("#load-seg button").forEach(x => x.classList.toggle("on", (x.dataset.load === "1") === !!s.loaded));
     renderCats(); show("calc");
     S.a = null; S.b = null; setPoint("a", s.a); setPoint("b", s.b);
@@ -316,14 +312,12 @@
   // ---------- тарифы ----------
   const F_BASE = [["base", "Подача (цена по городу), ₽"], ["perKm", "За каждый км маршрута, ₽"]];
   const F_TIER = [["hFrom", "Тяжёлый тариф с массы, т"], ["hBase", "Тяжёлый: подача, ₽"], ["hPerKm", "Тяжёлый: за км, ₽"]];
-  const F_HEAVY = [["lenLimit", "Длина без надбавки до, м"], ["lenFix", "Надбавка за длину, ₽"], ["lenPerM", "+ за каждый метр сверх, ₽"], ["hLimit", "Высота без надбавки до, м"], ["hFix", "Надбавка за высоту, ₽"]];
   const fld = (path, label, val) => `<label class="mini">${label}<input type="number" inputmode="decimal" step="any" min="0" data-path="${path}" value="${esc(val)}"></label>`;
   function renderSettings() {
     $("#cat-settings").innerHTML = Pricing.CATEGORIES.map(c => {
       const t = T.cats[c.id];
       let h = F_BASE.map(([k, l]) => fld(`cats.${c.id}.${k}`, l, t[k])).join("");
       if (c.weight) h += `<div class="sub">${c.weight === "cargo" ? "Тяжёлый тариф (масса авто + груз)" : "Тяжёлый тариф (масса техники)"}</div>` + F_TIER.map(([k, l]) => fld(`cats.${c.id}.${k}`, l, t[k])).join("");
-      if (c.heavy) h += `<div class="sub">Габариты (0 — не считать)</div>` + F_HEAVY.map(([k, l]) => fld(`cats.${c.id}.${k}`, l, t[k])).join("");
       return `<details class="card cat-card"><summary>${esc(c.name)} <small style="color:var(--mute);font-weight:400;margin-left:auto;margin-right:8px">${rub(t.base)} + ${t.perKm} ₽/км</small></summary><div class="grid">${h}</div></details>`;
     }).join("");
     renderExtraSettings();
