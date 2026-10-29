@@ -18,8 +18,14 @@
 
   const S = { car: null, cat: "L", loaded: false, a: null, b: null, km: null, min: null, extras: {}, pick: null };
 
+  function toastAction(msg, label, fn) {
+    const t = $("#toast"); t.innerHTML = `${esc(msg)} <button class="toast-btn">${esc(label)}</button>`;
+    t.classList.add("show", "act");
+    t.querySelector("button").onclick = () => { t.classList.remove("show", "act"); fn(); };
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show", "act"), 6000);
+  }
   function toast(msg) {
-    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+    const t = $("#toast"); t.textContent = msg; t.classList.remove("act"); t.classList.add("show");
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2200);
   }
 
@@ -116,7 +122,12 @@
       p.name = await Geo.reverse(lat, lon);
       $(which === "a" ? "#pa" : "#pb").value = p.name;
     });
-    if (map) { map.marker("a", S.a); map.marker("b", S.b); if (S.a && S.b) updateRoute(); }
+    if (map) {
+      map.marker("a", S.a); map.marker("b", S.b);
+      if (S.coords) map.line(S.coords);
+      else if (S.a && S.b) updateRoute();
+      else if (S.a || S.b) { const p = S.a || S.b; map.setView(p.lat, p.lon, 13); }
+    }
   }
   function setPick(which) {
     S.pick = which;
@@ -140,13 +151,13 @@
     const my = ++routeSeq;
     $("#route-err").classList.add("hidden");
     if (map) map.line(null);
-    S.km = null; S.min = null;
+    S.km = null; S.min = null; S.coords = null;
     if (S.a && S.b) {
       $("#r-km").textContent = "…";
       try {
         const r = await Geo.route(S.a, S.b);
         if (my !== routeSeq) return;
-        S.km = r.km; S.min = r.min;
+        S.km = r.km; S.min = r.min; S.coords = r.coords;
         if (map) map.line(r.coords);
       } catch (e) {
         if (my !== routeSeq) return;
@@ -209,6 +220,43 @@
     return Number.isFinite(m) && m > 0 ? m : (S.km || 0);
   }
   let last = null;
+  // ---------- текущий расчёт: сохраняется всегда, сбрасывается только кнопкой ----------
+  function getState() {
+    return { car: S.car, carText: $("#car").value, cat: S.cat, loaded: S.loaded, mass: $("#mass").value, cargo: $("#cargo").value,
+      a: S.a, b: S.b, kmManual: $("#km-manual").value, extras: Object.assign({}, S.extras),
+      km: S.km, min: S.min, coords: S.coords };
+  }
+  function applyState(s) {
+    s = s || {};
+    S.car = s.car || null; S.cat = s.cat || "L"; S.loaded = !!s.loaded; S.extras = Object.assign({}, s.extras);
+    $("#car").value = s.carText || ""; $("#mass").value = s.mass || ""; $("#cargo").value = s.cargo || ""; $("#km-manual").value = s.kmManual || "";
+    $$("#load-seg button").forEach(x => x.classList.toggle("on", (x.dataset.load === "1") === S.loaded));
+    S.a = s.a || null; S.b = s.b || null;
+    $("#pa").value = S.a ? S.a.name : ""; $("#pb").value = S.b ? S.b.name : "";
+    S.km = s.km ?? null; S.min = s.min ?? null; S.coords = s.coords || null;
+    $("#route-err").classList.add("hidden");
+    renderCats(); renderExtras();
+    if (map) {
+      map.marker("a", S.a); map.marker("b", S.b); map.line(S.coords);
+      if (!S.coords && S.a && S.b) updateRoute();
+      else if (!S.coords && (S.a || S.b)) { const p = S.a || S.b; map.setView(p.lat, p.lon, 13); }
+    } else if (S.a && S.b && S.km == null) updateRoute();
+    drawRouteInfo(); recalc();
+  }
+  let draftTimer;
+  const saveDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(() => store.set("evak.draft", getState()), 300); };
+  $("#car").addEventListener("input", saveDraft);
+  window.addEventListener("pagehide", () => store.set("evak.draft", getState()));
+  document.addEventListener("visibilitychange", () => { if (document.hidden) store.set("evak.draft", getState()); });
+
+  $("#btn-new").addEventListener("click", () => {
+    const prev = getState();
+    applyState(null);
+    store.set("evak.draft", getState());
+    show("calc");
+    toastAction("Расчёт сброшен", "Вернуть", () => { applyState(prev); store.set("evak.draft", getState()); });
+  });
+
   function recalc() {
     const input = {
       cat: S.cat, loaded: S.loaded,
@@ -221,6 +269,7 @@
     $("#lines").innerHTML = r.lines.map(l => `<li><span>${esc(l.label)}</span><b>${rub(l.sum)}</b></li>`).join("")
       + (r.total !== r.raw ? `<li class="round"><span>Округление (было ${rub(r.raw)})</span><b>${r.total > r.raw ? "+" : "−"}${rub(Math.abs(r.total - r.raw))}</b></li>` : "");
     $("#total").textContent = rub(r.total);
+    saveDraft();
     const m = catMeta();
     if (m.weight) {
       const c = T.cats[S.cat], heavy = c.hFrom > 0 && r.weight >= c.hFrom;
@@ -293,8 +342,7 @@
   function saveHistory(text) {
     history.unshift({
       t: Date.now(), text, total: last.r.total,
-      state: { car: S.car, carText: $("#car").value, cat: S.cat, loaded: S.loaded, mass: $("#mass").value, cargo: $("#cargo").value,
-        a: S.a, b: S.b, kmManual: $("#km-manual").value, extras: Object.assign({}, S.extras) }
+      state: Object.assign(getState(), { coords: null }) // линию маршрута не храним в истории — перестроится
     });
     history = history.slice(0, 50); store.set("evak.history", history);
   }
@@ -309,12 +357,8 @@
   }
   $("#history").addEventListener("click", e => {
     const li = e.target.closest("[data-h]"); if (!li) return;
-    const s = history[+li.dataset.h].state;
-    S.car = s.car; S.cat = s.cat; S.loaded = s.loaded; S.extras = Object.assign({}, s.extras);
-    $("#car").value = s.carText || ""; $("#mass").value = s.mass || ""; $("#cargo").value = s.cargo || ""; $("#km-manual").value = s.kmManual || "";
-    $$("#load-seg button").forEach(x => x.classList.toggle("on", (x.dataset.load === "1") === !!s.loaded));
-    renderCats(); show("calc");
-    S.a = null; S.b = null; setPoint("a", s.a); setPoint("b", s.b);
+    const s = Object.assign({}, history[+li.dataset.h].state);
+    show("calc"); applyState(s);
   });
   $("#clear-history").addEventListener("click", () => { if (confirm("Очистить историю?")) { history = []; store.set("evak.history", history); renderHistory(); } });
 
@@ -405,7 +449,9 @@
 
   // ---------- старт ----------
   document.body.classList.add("on-calc");
-  renderCats(); renderExtras(); initMap(); drawRouteInfo(); recalc();
+  const draft = store.get("evak.draft", null);
+  if (draft) applyState(draft); else { renderCats(); renderExtras(); drawRouteInfo(); recalc(); }
+  initMap();
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
