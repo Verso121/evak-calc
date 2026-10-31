@@ -1,0 +1,88 @@
+# Сборка приложений: Android (APK) и Windows (установщик .exe).
+# Запускается, когда меняется файл VERSION (или вручную). Готовые файлы — в Releases.
+name: Сборка приложений
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [VERSION]
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: Подготовка проекта
+        run: |
+          VER=$(cat VERSION); CODE=$(echo "$VER" | awk -F. '{print $1*10000+$2*100+$3}')
+          mkdir build-android && cd build-android
+          cp ../native/capacitor.config.json .
+          mkdir www && cp -r ../index.html ../manifest.webmanifest ../css ../js ../icons ../lib www/
+          sed -i "s/const APP_VERSION = \"[^\"]*\"/const APP_VERSION = \"$VER\"/" www/js/app.js
+          npm init -y > /dev/null
+          npm i @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/share@7 @capacitor/filesystem@7 @capacitor/splash-screen@7 @capacitor/assets@3
+          npx cap add android
+          cp -r ../native/assets assets
+          npx @capacitor/assets generate --android --iconBackgroundColor '#121417' --iconBackgroundColorDark '#121417' --splashBackgroundColor '#121417' --splashBackgroundColorDark '#121417'
+          npx cap sync android
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#&\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />#' $M
+          grep -c ACCESS_FINE_LOCATION $M
+          sed -i "s/versionCode 1$/versionCode $CODE/; s/versionName \"1.0\"/versionName \"$VER\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+      - name: Сборка APK
+        working-directory: build-android/android
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Подпись APK
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          IN=build-android/android/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$BT/zipalign" -p -f 4 "$IN" aligned.apk
+          "$BT/apksigner" sign --ks native/evak-release.p12 --ks-type PKCS12 --ks-pass pass:evakcalc \
+            --ks-key-alias evak --key-pass pass:evakcalc --out Evak-Calculator.apk aligned.apk
+          "$BT/apksigner" verify Evak-Calculator.apk
+          ls -la Evak-Calculator.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: Evak-Calculator.apk }
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run: { shell: bash }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Сборка установщика
+        run: |
+          VER=$(cat VERSION)
+          cd native/desktop
+          mkdir web && cp -r ../../index.html ../../manifest.webmanifest ../../css ../../js ../../icons ../../lib web/
+          sed -i "s/const APP_VERSION = \"[^\"]*\"/const APP_VERSION = \"$VER\"/" web/js/app.js
+          npm pkg set version="$VER"
+          npm i -D electron@33 electron-builder@25
+          npx electron-builder --win nsis --x64 --publish never
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: native/desktop/dist/Evak-Calculator-Setup.exe }
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - name: Выкладка в Releases
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          VER=$(cat VERSION); ls -la out
+          NOTES="Android: Evak-Calculator.apk · Windows: Evak-Calculator-Setup.exe"
+          gh release create "v$VER" out/* --title "Эвак Калькулятор $VER" --notes "$NOTES" --latest \
+            || gh release upload "v$VER" out/* --clobber

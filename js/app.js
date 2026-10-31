@@ -6,6 +6,12 @@
   const rub = n => Math.round(n).toLocaleString("ru-RU") + " ₽";
 
   // ---------- хранилище ----------
+  // Где запущено: сайт, Android-приложение (Capacitor) или программа Windows (Electron)
+  const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const DESKTOP = /Electron/i.test(navigator.userAgent);
+  const Plug = n => (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins[n]) || null;
+  const APP_VERSION = "1.0.0";
+
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* нет места/запрещено */ } }
@@ -305,7 +311,11 @@
     if (!last || !last.r.total) return toast("Нечего отправлять");
     const text = clientText();
     saveHistory(text);
-    if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+    if (NATIVE && Plug("Share")) {
+      try { await Plug("Share").share({ text, dialogTitle: "Отправить клиенту" }); return; }
+      catch (e) { if (/cancel/i.test(String(e && e.message))) return; }
+    }
+    if (!NATIVE && navigator.share && matchMedia("(pointer: coarse)").matches) {
       try { await navigator.share({ text }); return; } catch (e) { if (e.name === "AbortError") return; }
     }
     if (await copyText(text)) toast("Скопировано — вставь клиенту");
@@ -335,7 +345,9 @@
   });
   $("#btn-nav").addEventListener("click", () => {
     if (!(S.a && S.b)) return toast("Укажи точки A и B");
-    window.open(Geo.yandexLink(S.a, S.b), "_blank");
+    const url = Geo.yandexLink(S.a, S.b);
+    if (NATIVE) location.href = url; // приложение откроет Яндекс Карты / браузер
+    else window.open(url, "_blank");
   });
 
   // ---------- история ----------
@@ -425,10 +437,19 @@
   $("#min-total").addEventListener("input", e => { T.minTotal = +e.target.value || 0; saveT(); });
   $("#share-detail").addEventListener("change", e => { prefs.shareDetail = e.target.checked; saveP(); });
 
-  $("#export").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify({ app: "evak-calc", tariffs: T, prefs }, null, 2)], { type: "application/json" });
+  $("#export").addEventListener("click", async () => {
+    const json = JSON.stringify({ app: "evak-calc", tariffs: T, prefs }, null, 2);
+    const name = `evak-tarify-${new Date().toISOString().slice(0, 10)}.json`;
+    if (NATIVE && Plug("Filesystem") && Plug("Share")) {
+      try {
+        const w = await Plug("Filesystem").writeFile({ path: name, data: json, directory: "CACHE", encoding: "utf8" });
+        await Plug("Share").share({ title: "Тарифы Эвак", files: [w.uri], dialogTitle: "Сохранить или отправить тарифы" });
+      } catch (e) { if (!/cancel/i.test(String(e && e.message))) toast("Не удалось экспортировать"); }
+      return;
+    }
+    const blob = new Blob([json], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `evak-tarify-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
   $("#import").addEventListener("click", () => $("#import-file").click());
@@ -452,7 +473,8 @@
   const draft = store.get("evak.draft", null);
   if (draft) applyState(draft); else { renderCats(); renderExtras(); drawRouteInfo(); recalc(); }
   initMap();
-  if ("serviceWorker" in navigator && location.protocol === "https:") {
+  $("#app-ver").textContent = APP_VERSION + (NATIVE ? " · Android" : DESKTOP ? " · Windows" : "");
+  if (!NATIVE && !DESKTOP && "serviceWorker" in navigator && location.protocol === "https:") {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
       reg.update().catch(() => {});

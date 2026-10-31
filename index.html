@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="lib/leaflet/leaflet.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -122,8 +122,9 @@
       <button id="import" class="ghost">Импорт</button>
       <button id="reset" class="danger">Сбросить</button>
     </div>
-    <input id="import-file" type="file" accept=".json,application/json" hidden>
+    <input id="import-file" type="file" accept=".json,application/json,text/plain,*/*" hidden>
   </section>
+  <p class="note" style="text-align:center">Эвак Калькулятор · версия <span id="app-ver"></span></p>
   <div class="spacer"></div>
 </main>
 
@@ -149,7 +150,7 @@
 
 <div id="toast"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="lib/leaflet/leaflet.js"></script>
 <script src="js/cars.js"></script>
 <script src="js/pricing.js"></script>
 <script src="js/geo.js"></script>
